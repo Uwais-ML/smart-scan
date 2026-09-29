@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Scan — Electronic Warfare Tactical Command</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    @keyframes pulse-red {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.3); }
+    }
+    .radar-grid {
+      background: radial-gradient(circle, rgba(15, 23, 42, 0.9) 0%, rgba(2, 6, 23, 0.98) 100%);
+    }
+    .glow-red {
+      box-shadow: 0 0 15px rgba(239, 68, 68, 0.5);
+    }
+    .glow-cyan {
+      box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
+    }
+    /* Custom scrollbars */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
+    ::-webkit-scrollbar-thumb { background: rgba(51, 65, 85, 0.8); rounded: 3px; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans antialiased min-h-screen p-4 md:p-6 select-none">
+
+  <!-- TOP BAR -->
+  <header class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 pb-5 border-b border-slate-800 mb-6">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-lg bg-red-600/20 border border-red-500/40 flex items-center justify-center glow-red">
+        <svg class="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2v20m10-10H2m15.364-7.364l-14.728 14.728M19.364 19.364L4.636 4.636"/>
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-xl font-bold tracking-wider uppercase text-slate-50 flex items-center gap-2">
+          Smart Scan <span class="text-xs font-semibold px-2 py-0.5 rounded bg-red-950 text-red-400 border border-red-800">EW TACTICAL RADAR</span>
+        </h1>
+        <p class="text-xs text-slate-400">Frequency-Hopping Radio Detection & Deep RL Pre-Tuning System</p>
+      </div>
+    </div>
+
+    <!-- METRICS QUICK STATS -->
+    <div class="flex items-center gap-6 bg-slate-900/80 border border-slate-800 px-4 py-2 rounded-xl text-xs">
+      <div>
+        <span class="text-slate-400 block uppercase tracking-wider text-[10px]">Processed Events</span>
+        <span id="stat-readings" class="font-mono font-bold text-slate-200 text-sm">00000</span>
+      </div>
+      <div class="h-6 w-px bg-slate-800"></div>
+      <div>
+        <span class="text-slate-400 block uppercase tracking-wider text-[10px]">Active Tracks</span>
+        <span id="stat-tracks" class="font-mono font-bold text-cyan-400 text-sm">0</span>
+      </div>
+      <div class="h-6 w-px bg-slate-800"></div>
+      <div>
+        <span class="text-slate-400 block uppercase tracking-wider text-[10px]">Confirmed Threats</span>
+        <span id="stat-threats" class="font-mono font-bold text-red-400 text-sm">0</span>
+      </div>
+      <div class="h-6 w-px bg-slate-800"></div>
+      <div>
+        <span class="text-slate-400 block uppercase tracking-wider text-[10px]">Source</span>
+        <span id="stat-source" class="font-mono font-semibold text-emerald-400">SIMULATED</span>
+      </div>
+    </div>
+
+    <!-- CONTROLS -->
+    <div class="flex items-center gap-3">
+      <button id="btn-toggle" onclick="toggleScan()" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-950">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <span>PAUSE SCAN</span>
+      </button>
+      <button onclick="resetSystem()" class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs transition-all border border-slate-700">
+        RESET
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT GRID -->
+  <main class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <!-- LEFT COLUMN: TACTICAL RADAR CANVAS (7 cols) -->
+    <section class="lg:col-span-7 bg-slate-900/60 border border-slate-800/80 rounded-2xl p-5 backdrop-blur-md flex flex-col justify-between">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+          Concentric Radius Tactical Spectrum (0 - 600m)
+        </h2>
+        <span class="text-[11px] font-mono text-slate-400">FPS: <span id="fps-counter">60</span></span>
+      </div>
+
+      <!-- RADAR CANVAS CONTAINER -->
+      <div class="relative aspect-square w-full max-w-[500px] mx-auto radar-grid rounded-full border border-cyan-500/30 shadow-2xl p-2 flex items-center justify-center">
+        <canvas id="radarCanvas" width="500" height="500" class="w-full h-full rounded-full"></canvas>
+      </div>
+
+      <!-- RADAR LEGEND -->
+      <div class="flex items-center justify-center gap-6 mt-4 pt-3 border-t border-slate-800/60 text-xs text-slate-400">
+        <div class="flex items-center gap-2">
+          <span class="w-3 h-3 rounded-full bg-red-500 border border-red-300 shadow-sm shadow-red-500"></span>
+          <span>Hostile Threat</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="w-3 h-3 rounded-full bg-amber-400 border border-amber-200"></span>
+          <span>Suspicious</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="w-3 h-3 rounded-full bg-cyan-400 border border-cyan-200"></span>
+          <span>Transient/Decoy</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="w-4 h-0.5 bg-emerald-400"></span>
+          <span>DQN Next-Hop Target</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT COLUMN: SPECTROGRAM & DQN PREDICTOR (5 cols) -->
+    <section class="lg:col-span-5 space-y-6 flex flex-col">
+      
+      <!-- WATERFALL SPECTROGRAM -->
+      <div class="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-5 backdrop-blur-md">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+            <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+            Waterfall Spectrogram (400 - 500 MHz)
+          </h2>
+          <span class="text-[10px] font-mono text-slate-400">64 Channels</span>
+        </div>
+        <canvas id="spectrogramCanvas" width="400" height="180" class="w-full h-44 rounded-xl border border-slate-800 bg-slate-950"></canvas>
+      </div>
+
+      <!-- DQN PREDICTOR & DISTANCE PANEL -->
+      <div class="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-5 backdrop-blur-md space-y-4 flex-1">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+          <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          DQN Pre-Tuning & Distance Regression
+        </h2>
+
+        <div id="target-focus-card" class="bg-slate-950 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
+          <div>
+            <span class="text-[10px] uppercase tracking-wider text-slate-400 block">Focus Target Emitter</span>
+            <span id="focus-track-id" class="text-lg font-bold text-red-400 font-mono">TRK-001</span>
+          </div>
+          <div class="text-right">
+            <span class="text-[10px] uppercase tracking-wider text-slate-400 block">DQN Next-Hop Target</span>
+            <span id="focus-next-hop" class="text-sm font-mono font-bold text-emerald-400">Ch 47 (474.2 MHz)</span>
+          </div>
+          <div class="text-right">
+            <span class="text-[10px] uppercase tracking-wider text-slate-400 block">Confidence</span>
+            <span id="focus-confidence" class="text-sm font-mono font-bold text-cyan-400">86.4%</span>
+          </div>
+        </div>
+
+        <!-- EW ALERT CONSOLE -->
+        <div>
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-2">Live EW Alert Log</span>
+          <div id="alert-feed" class="space-y-2 max-h-36 overflow-y-auto pr-1 text-xs font-mono">
+            <div class="text-slate-500 italic">Listening for tactical RF alerts...</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- BOTTOM ROW: ACTIVE EMITTER TRACKS TABLE (12 cols) -->
+    <section class="lg:col-span-12 bg-slate-900/60 border border-slate-800/80 rounded-2xl p-5 backdrop-blur-md">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+          <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+          Active Emitter Track Directory
+        </h2>
+        <span class="text-xs text-slate-400 font-mono">Spatial-Spectral Clustering</span>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-slate-950/80 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
+            <tr>
+              <th class="py-3 px-4">Track ID</th>
+              <th class="py-3 px-4">Threat Status</th>
+              <th class="py-3 px-4">Est. Radius (m)</th>
+              <th class="py-3 px-4">Logged Hops</th>
+              <th class="py-3 px-4">Last Frequency</th>
+              <th class="py-3 px-4">DQN Next-Hop Target</th>
+              <th class="py-3 px-4">Confidence</th>
+              <th class="py-3 px-4">EW Classification Reasoning</th>
+            </tr>
+          </thead>
+          <tbody id="tracks-table-body" class="divide-y divide-slate-800/60 font-mono">
+            <tr>
+              <td colspan="8" class="py-6 text-center text-slate-500 italic">Scanning RF spectrum for emitter tracks...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- JAVASCRIPT FRONTEND ENGINE -->
+  <script>
+    let isScanning = true;
+    let eventSource = null;
+    let lastData = null;
+    let frameCount = 0;
+    let lastFpsTime = performance.now();
+
+    // Canvas contexts
+    const radarCanvas = document.getElementById('radarCanvas');
+    const radarCtx = radarCanvas.getContext('2d');
+    const specCanvas = document.getElementById('spectrogramCanvas');
+    const specCtx = specCanvas.getContext('2d');
+
+    let sweepAngle = 0;
+
+    // Start SSE stream
+    function initStream() {
+      eventSource = new EventSource('/api/stream');
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        lastData = data;
+        updateUI(data);
+      };
+      eventSource.onerror = () => {
+        // Fallback polling if SSE fails
+        fetchSnapshot();
+      };
+    }
+
+    async function fetchSnapshot() {
+      try {
+        const res = await fetch('/api/snapshot');
+        const data = await res.json();
+        lastData = data;
+        updateUI(data);
+      } catch (e) {
+        console.error("Fetch snapshot error", e);
+      }
+    }
+
+    function updateUI(data) {
+      if (!data) return;
+
+      // Update Header Stats
+      document.getElementById('stat-readings').innerText = String(data.system.total_readings).padStart(5, '0');
+      document.getElementById('stat-tracks').innerText = data.summary.total_active_tracks;
+      document.getElementById('stat-threats').innerText = data.summary.threat_count;
+      document.getElementById('stat-source').innerText = data.system.source_mode.toUpperCase();
+
+      // Update Tracks Table
+      renderTable(data.tracks);
+
+      // Update Focus Target Card
+      if (data.tracks.length > 0) {
+        const focusTrack = data.tracks.find(t => t.threat_level === "THREAT") || data.tracks[0];
+        document.getElementById('focus-track-id').innerText = focusTrack.track_id;
+        document.getElementById('focus-next-hop').innerText = focusTrack.predicted_next_channel !== null 
+          ? `Ch ${String(focusTrack.predicted_next_channel).padStart(2, '0')} (${focusTrack.predicted_next_freq_mhz} MHz)` 
+          : 'N/A';
+        document.getElementById('focus-confidence').innerText = `${focusTrack.threat_confidence}%`;
+      }
+
+      // Update Alert Feed
+      renderAlerts(data.alerts);
+
+      // Draw Spectrogram
+      drawSpectrogram(data.spectrogram, data.system.num_channels);
+    }
+
+    function renderTable(tracks) {
+      const tbody = document.getElementById('tracks-table-body');
+      if (!tracks || tracks.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="py-6 text-center text-slate-500 italic">Scanning RF spectrum for emitter tracks...</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = tracks.map(t => {
+        let badgeClass = "bg-slate-800 text-slate-400 border-slate-700";
+        if (t.threat_level === "THREAT") badgeClass = "bg-red-950 text-red-400 border-red-800 font-bold glow-red";
+        else if (t.threat_level === "SUSPICIOUS") badgeClass = "bg-amber-950 text-amber-400 border-amber-800 font-semibold";
+        else if (t.threat_level === "TRANSIENT") badgeClass = "bg-cyan-950 text-cyan-400 border-cyan-800";
+
+        const nextHopText = t.predicted_next_channel !== null ? `Ch ${String(t.predicted_next_channel).padStart(2, '0')} (${t.predicted_next_freq_mhz} MHz)` : 'N/A';
+
+        return `
+          <tr class="hover:bg-slate-900/80 transition-colors">
+            <td class="py-3 px-4 font-bold text-slate-200">${t.track_id}</td>
+            <td class="py-3 px-4">
+              <span class="px-2.5 py-1 rounded-md text-[11px] border ${badgeClass}">${t.threat_level}</span>
+            </td>
+            <td class="py-3 px-4 text-slate-300">${t.estimated_radius_m}m <span class="text-slate-500 text-[10px]">(±${t.radius_uncertainty_m}m)</span></td>
+            <td class="py-3 px-4 text-slate-400">${t.hop_count}</td>
+            <td class="py-3 px-4 text-slate-300">${t.last_frequency} MHz</td>
+            <td class="py-3 px-4 font-semibold text-emerald-400">${nextHopText}</td>
+            <td class="py-3 px-4 text-cyan-400 font-semibold">${t.threat_confidence}%</td>
+            <td class="py-3 px-4 text-slate-400 truncate max-w-xs" title="${t.reasoning}">${t.reasoning}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function renderAlerts(alerts) {
+      const feed = document.getElementById('alert-feed');
+      if (!alerts || alerts.length === 0) {
+        feed.innerHTML = `<div class="text-slate-500 italic">Listening for tactical RF alerts...</div>`;
+        return;
+      }
+      feed.innerHTML = alerts.slice().reverse().map(a => `
+        <div class="p-2 rounded bg-red-950/40 border border-red-900/60 text-red-300 flex items-start gap-2">
+          <span class="text-red-500 font-bold">🚨</span>
+          <div>
+            <div class="font-bold">${a.message}</div>
+            <div class="text-[10px] text-red-400/80">Time: ${a.timestamp}s | Targeting Next Hop: Ch ${a.next_channel} (${a.next_freq} MHz)</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function drawRadar() {
+      const width = radarCanvas.width;
+      const height = radarCanvas.height;
+      const cX = width / 2;
+      const cY = height / 2;
+      const maxR = width / 2 - 20;
+
+      radarCtx.clearRect(0, 0, width, height);
+
+      // Background range rings
+      const rings = [100, 250, 400, 550];
+      radarCtx.strokeStyle = 'rgba(6, 182, 212, 0.2)';
+      radarCtx.lineWidth = 1;
+      radarCtx.font = '10px monospace';
+      radarCtx.fillStyle = 'rgba(6, 182, 212, 0.6)';
+
+      rings.forEach(r => {
+        const radius = (r / 600) * maxR;
+        radarCtx.beginPath();
+        radarCtx.arc(cX, cY, radius, 0, Math.PI * 2);
+        radarCtx.stroke();
+        radarCtx.fillText(`${r}m`, cX + 4, cY - radius + 12);
+      });
+
+      // Axis lines
+      radarCtx.beginPath();
+      radarCtx.moveTo(cX - maxR, cY); radarCtx.lineTo(cX + maxR, cY);
+      radarCtx.moveTo(cX, cY - maxR); radarCtx.lineTo(cX, cY + maxR);
+      radarCtx.stroke();
+
+      // Rotating Sweep Line
+      sweepAngle += 0.025;
+      if (sweepAngle > Math.PI * 2) sweepAngle = 0;
+
+      const sweepX = cX + Math.cos(sweepAngle) * maxR;
+      const sweepY = cY + Math.sin(sweepAngle) * maxR;
+
+      const gradient = radarCtx.createLinearGradient(cX, cY, sweepX, sweepY);
+      gradient.addColorStop(0, 'rgba(6, 182, 212, 0.8)');
+      gradient.addColorStop(1, 'rgba(6, 182, 212, 0.0)');
+
+      radarCtx.beginPath();
+      radarCtx.moveTo(cX, cY);
+      radarCtx.lineTo(sweepX, sweepY);
+      radarCtx.strokeStyle = gradient;
+      radarCtx.lineWidth = 2;
+      radarCtx.stroke();
+
+      // Draw Emitters on Radar
+      if (lastData && lastData.tracks) {
+        lastData.tracks.forEach((track, idx) => {
+          const r = (track.estimated_radius_m / 600) * maxR;
+          // Hash track_id to fixed angle on radar
+          const angle = (idx + 1) * 1.35;
+          const x = cX + Math.cos(angle) * r;
+          const y = cY + Math.sin(angle) * r;
+
+          // Target color
+          let color = '#06b6d4'; // Cyan default
+          if (track.threat_level === 'THREAT') color = '#ef4444'; // Red
+          else if (track.threat_level === 'SUSPICIOUS') color = '#f59e0b'; // Amber
+
+          // Radius uncertainty halo
+          const uncR = (track.radius_uncertainty_m / 600) * maxR;
+          radarCtx.beginPath();
+          radarCtx.arc(x, y, Math.max(8, uncR), 0, Math.PI * 2);
+          radarCtx.fillStyle = color + '22';
+          radarCtx.fill();
+
+          // Blip marker
+          radarCtx.beginPath();
+          radarCtx.arc(x, y, 6, 0, Math.PI * 2);
+          radarCtx.fillStyle = color;
+          radarCtx.fill();
+          radarCtx.strokeStyle = '#ffffff';
+          radarCtx.lineWidth = 1.5;
+          radarCtx.stroke();
+
+          // Label
+          radarCtx.fillStyle = '#f8fafc';
+          radarCtx.font = 'bold 11px font-mono';
+          radarCtx.fillText(track.track_id, x + 10, y - 4);
+          radarCtx.fillStyle = '#94a3b8';
+          radarCtx.font = '10px font-mono';
+          radarCtx.fillText(`${track.estimated_radius_m}m`, x + 10, y + 8);
+        });
+      }
+
+      // FPS calculation
+      frameCount++;
+      const now = performance.now();
+      if (now - lastFpsTime >= 1000) {
+        document.getElementById('fps-counter').innerText = frameCount;
+        frameCount = 0;
+        lastFpsTime = now;
+      }
+
+      requestAnimationFrame(drawRadar);
+    }
+
+    function drawSpectrogram(spectrogram, numChannels) {
+      const width = specCanvas.width;
+      const height = specCanvas.height;
+      specCtx.clearRect(0, 0, width, height);
+
+      if (!spectrogram || spectrogram.length === 0) return;
+
+      const cellW = width / numChannels;
+      const rows = spectrogram.length;
+      const cellH = height / Math.max(1, rows);
+
+      spectrogram.forEach((item, rIdx) => {
+        const y = rIdx * cellH;
+        const x = item.channel * cellW;
+
+        let fill = item.is_threat ? '#ef4444' : '#06b6d4';
+        specCtx.fillStyle = fill;
+        specCtx.fillRect(x, y, cellW + 1, cellH + 1);
+      });
+    }
+
+    async function toggleScan() {
+      isScanning = !isScanning;
+      const btn = document.getElementById('btn-toggle');
+      if (isScanning) {
+        btn.className = "px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-950";
+        btn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>PAUSE SCAN</span>`;
+      } else {
+        btn.className = "px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs transition-all flex items-center gap-1.5 shadow-lg shadow-amber-950";
+        btn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/></svg><span>RESUME SCAN</span>`;
+      }
+      await fetch('/api/control/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ running: isScanning })
+      });
+    }
+
+    async function resetSystem() {
+      await fetch('/api/control/reset', { method: 'POST' });
+      fetchSnapshot();
+    }
+
+    // Initialize radar animation loop & SSE stream
+    window.addEventListener('DOMContentLoaded', () => {
+      initStream();
+      requestAnimationFrame(drawRadar);
+    });
+  </script>
+</body>
+</html>
